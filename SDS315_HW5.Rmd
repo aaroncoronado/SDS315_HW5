@@ -1,0 +1,106 @@
+---
+title: "SDS315_HW5"
+author: "Aaron Coronado"
+date: "2024-02-29"
+output: html_document
+---
+
+# **Homework 5**
+
+```{r Setup, message = FALSE, warning = FALSE, echo = FALSE}
+library(tidyverse)
+library(mosaic)
+library(ggplot2)
+library(kableExtra)
+let_freq <- read_csv("letter_frequencies.csv")
+brown <- readLines("brown_sentences.txt")
+```
+
+## **Problem 1**
+
+$H_0$: The rate at which securities trades from the Iron Bank are flagged by the SEC's detection algorithm is equal to the baseline rate of 2.4% for all traders.\
+Test Statistic: Of the last 2021 trades by Iron Bank employees, 70 were flagged by the SEC's detection algorithm.
+
+```{r Problem 1, message = FALSE, warning = FALSE, echo = FALSE}
+sim_insider = do(100000) * nflip(n = 2021, prob = 0.024)
+ggplot(sim_insider) +
+  geom_histogram(aes(x = nflip)) +
+  labs(title = "Distribution of Simulated Flagged Trades", x = "Number of Security Tradings Flagged", y = "Frequency")
+```
+
+p-value: `r sum(sim_insider >= 70) / 100000`\
+Since p-value < $\alpha$, the null hypothesis must be rejected. Therefore, the SEC should investigate the Iron Bank because 70 flagged trades out of 2021 is not plausibly consistent with the 2.4% random variability in trading patterns.
+
+## **Problem 2**
+
+$H_0$: The rate of health code violations at Gourmet Bites is equal to the citywide average rate of 3%.\
+Test Statistic: Of the 50 inspections conducted at various branches of Gourmet Bites, 8 resulted in health code violations being reported.
+
+```{r Problem 2, message = FALSE, warning = FALSE, echo = FALSE}
+sim_violations = do(100000) * nflip(n = 50, prob = 0.03)
+ggplot(sim_violations) +
+  geom_histogram(aes(x = nflip), binwidth = 1) +
+  labs(title = "Distribution of Simulated Violation Rates at Gourmet Bites",
+       x = "Number of Violations", y = "Frequency")
+```
+
+p-value: `r sum(sim_violations >= 8) / 100000`\
+Since p-value < $\alpha$, the null hypothesis must be rejected. Therefore, the Health Department should take action because Gourmet Bites' rate of health code violations is not plausibly consistent with the average 3% of random health code violations at well-managed establishments.
+
+## **Problem 3**
+
+### **Part A**
+
+```{r Problem 3.A, message = FALSE, warning = FALSE, echo = FALSE}
+calculate_chi_squared = function(sentence, freq_table) {
+  clean_sentence = toupper(gsub("[^A-Za-z]", "", sentence))
+  freq_table$Probability = freq_table$Probability / sum(freq_table$Probability)
+  observed_counts = table(factor(strsplit(clean_sentence, "")[[1]], levels = freq_table$Letter))
+  total_letters = sum(observed_counts)
+  expected_counts = total_letters * freq_table$Probability
+  chi_squared_stat = sum((observed_counts - expected_counts)^2 / expected_counts)
+  return(chi_squared_stat)
+}
+
+brown_chi_sq = sapply(brown, calculate_chi_squared, freq_table = let_freq)
+null_distribution = brown_chi_sq %>%
+  as.tibble()
+
+ggplot(null_distribution, aes(x = value)) +
+  geom_histogram() +
+  labs(title = "Distribution of Chi-Squared Values for the Brown Sentences", x = "Chi-Squared Values", y = "Frequency")
+```
+
+### **Part B**
+
+```{r Problem 3.B, message = FALSE, warning = FALSE, echo = FALSE}
+sentences <- c(
+  "She opened the book and started to read the first chapter, eagerly anticipating what might come next.",
+  "Despite the heavy rain, they decided to go for a long walk in the park, crossing the main avenue by the fountain in the center.",
+  "The museum’s new exhibit features ancient artifacts from various civilizations around the world.",
+  "He carefully examined the document, looking for any clues that might help solve the mystery.",
+  "The students gathered in the auditorium to listen to the guest speaker’s inspiring lecture.",
+  "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland.",
+  "The chef demonstrated how to prepare a delicious meal using only locally sourced ingredients, focusing mainly on some excellent dinner recipes from Spain.",
+  "They watched the sunset from the hilltop, marveling at the beautiful array of colors in the sky.",
+  "The committee reviewed the proposal and provided many points of useful feedback to improve the project’s effectiveness.",
+  "Despite the challenges faced during the project, the team worked tirelessly to ensure its successful completion, resulting in a product that exceeded everyone’s expectations."
+)
+
+chi_sq_vals <- sapply(sentences, calculate_chi_squared, freq_table = let_freq)
+
+pval_table = tibble(Sentence = character(), pvalue = numeric())
+
+for(x in 1:10){
+  temp_chi_sq = chi_sq_vals[[x]]
+  if(temp_chi_sq >= mean(null_distribution$value))
+    temp_pval = sum(null_distribution >= chi_sq_vals[[x]]) / nrow(null_distribution)
+  else
+    temp_pval = sum(null_distribution < chi_sq_vals[[x]]) / nrow(null_distribution)
+  pval_table <- bind_rows(pval_table, tibble(Sentence = sentences[x], pvalue = round(temp_pval, 3)))
+}
+
+kable_styling(kbl(pval_table))
+```
+
+According to my table, there are two sentences with a p value of less than 0.05. Since its p value is the lesser of the two, I think the "Feeling vexed after..." sentence was produced and watermarked by an LLM.
